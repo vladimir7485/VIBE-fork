@@ -17,6 +17,46 @@
 import os
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 
+# Fix for Python 3.11+ compatibility with chumpy
+import inspect
+if not hasattr(inspect, 'getargspec'):
+    # inspect.getargspec was deprecated in Python 3.0 and removed in Python 3.11+
+    # Provide a compatibility shim using inspect.getfullargspec
+    def getargspec(func):
+        """Compatibility shim for inspect.getargspec using inspect.getfullargspec"""
+        spec = inspect.getfullargspec(func)
+        return inspect.ArgSpec(
+            args=spec.args,
+            varargs=spec.varargs,
+            keywords=spec.varkw,
+            defaults=spec.defaults
+        )
+    inspect.getargspec = getargspec
+    # Create ArgSpec named tuple for compatibility
+    if not hasattr(inspect, 'ArgSpec'):
+        from collections import namedtuple
+        inspect.ArgSpec = namedtuple('ArgSpec', ['args', 'varargs', 'keywords', 'defaults'])
+
+# Fix for NumPy 1.20+ compatibility with chumpy
+# chumpy tries to import deprecated NumPy type aliases that were removed
+import numpy as np
+# Add deprecated aliases back for chumpy compatibility
+if not hasattr(np, 'bool'):
+    np.bool = np.bool_
+if not hasattr(np, 'int'):
+    np.int = np.int_
+if not hasattr(np, 'float'):
+    np.float = np.float_
+if not hasattr(np, 'complex'):
+    np.complex = np.complex_
+if not hasattr(np, 'object'):
+    np.object = np.object_
+if not hasattr(np, 'unicode'):
+    np.unicode = np.unicode_
+if not hasattr(np, 'str'):
+    np.str = np.str_
+# Note: np.nan and np.inf already exist in numpy, no need to add them
+
 import cv2
 import time
 import torch
@@ -24,7 +64,6 @@ import joblib
 import shutil
 import colorsys
 import argparse
-import numpy as np
 from tqdm import tqdm
 from multi_person_tracker import MPT
 from torch.utils.data import DataLoader
@@ -112,7 +151,8 @@ def main(args):
 
     # ========= Load pretrained weights ========= #
     pretrained_file = download_ckpt(use_3dpw=False)
-    ckpt = torch.load(pretrained_file)
+    # weights_only=False needed for PyTorch 2.6+ compatibility with checkpoints containing NumPy scalars
+    ckpt = torch.load(pretrained_file, weights_only=False)
     print(f'Performance of pretrained model on 3DPW: {ckpt["performance"]}')
     ckpt = ckpt['gen_state_dict']
     model.load_state_dict(ckpt, strict=False)
